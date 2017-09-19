@@ -54,8 +54,6 @@ namespace Compress.ZipFile
         public ZipOpenType ZipOpen { get; private set; }
 
 
-        public ZipStatus ZipStatus { get; private set; }
-
         public int LocalFilesCount()
         {
             return _localFiles.Count;
@@ -133,7 +131,6 @@ namespace Compress.ZipFile
             }
 
             _zip64 = false;
-            bool lTrrntzip = true;
 
             _centerDirStart = (ulong) _zipFs.Position;
             if (_centerDirStart >= 0xffffffff)
@@ -147,7 +144,6 @@ namespace Compress.ZipFile
             {
                 t.CenteralDirectoryWrite(crcCs);
                 _zip64 |= t.Zip64;
-                lTrrntzip &= t.TrrntZip;
             }
 
             crcCs.Flush();
@@ -155,8 +151,7 @@ namespace Compress.ZipFile
 
             _centerDirSize = (ulong) _zipFs.Position - _centerDirStart;
 
-            _fileComment = lTrrntzip ? GetBytes("TORRENTZIPPED-" + crcCs.Crc.ToString("X8")) : new byte[0];
-            ZipStatus = lTrrntzip ? ZipStatus.TrrntZip : ZipStatus.None;
+            _fileComment = new byte[0];
 
             crcCs.Dispose();
 
@@ -378,11 +373,6 @@ namespace Compress.ZipFile
 
             _fileComment = zipBr.ReadBytes(zipFileCommentLength);
 
-            if (_zipFs.Position != _zipFs.Length)
-            {
-                ZipStatus |= ZipStatus.ExtraData;
-            }
-
             return ZipReturn.ZipGood;
         }
 
@@ -510,7 +500,6 @@ namespace Compress.ZipFile
         public ZipReturn ZipFileOpen(string newFilename, bool readHeaders)
         {
             ZipFileClose();
-            ZipStatus = ZipStatus.None;
             _zip64 = false;
             _centerDirStart = 0;
             _centerDirSize = 0;
@@ -551,7 +540,6 @@ namespace Compress.ZipFile
         public ZipReturn ZipFileOpen(byte[] zipBytes)
         {
             ZipFileClose();
-            ZipStatus = ZipStatus.None;
             _zip64 = false;
             _centerDirStart = 0;
             _centerDirSize = 0;
@@ -602,33 +590,6 @@ namespace Compress.ZipFile
                     }
                 }
 
-                bool trrntzip = false;
-
-                // check if the ZIP has a valid TorrentZip file comment
-                if (_fileComment.Length == 22)
-                {
-                    if (GetString(_fileComment).Substring(0, 14) == "TORRENTZIPPED-")
-                    {
-                        CrcCalculatorStream crcCs = new CrcCalculatorStream(_zipFs, true);
-                        byte[] buffer = new byte[_centerDirSize];
-                        _zipFs.Position = (long) _centerDirStart;
-                        crcCs.Read(buffer, 0, (int) _centerDirSize);
-                        crcCs.Flush();
-                        crcCs.Close();
-
-                        uint r = (uint) crcCs.Crc;
-                        crcCs.Dispose();
-
-                        string tcrc = GetString(_fileComment).Substring(14, 8);
-                        string zcrc = r.ToString("X8");
-                        if (string.Compare(tcrc, zcrc, StringComparison.Ordinal) == 0)
-                        {
-                            trrntzip = true;
-                        }
-                    }
-                }
-
-
                 // now read the central directory
                 _zipFs.Position = (long) _centerDirStart;
 
@@ -655,55 +616,6 @@ namespace Compress.ZipFile
                         ZipFileClose();
                         return zRet;
                     }
-                    trrntzip &= _localFiles[i].TrrntZip;
-                }
-
-                // check trrntzip file order
-                if (trrntzip)
-                {
-                    for (int i = 0; i < _localFilesCount - 1; i++)
-                    {
-                        if (TrrntZipStringCompare(_localFiles[i].FileName, _localFiles[i + 1].FileName) < 0)
-                        {
-                            continue;
-                        }
-                        trrntzip = false;
-                        break;
-                    }
-                }
-
-                // check trrntzip directories
-                if (trrntzip)
-                {
-                    for (int i = 0; i < _localFilesCount - 1; i++)
-                    {
-                        // see if we found a directory
-                        string filename0 = _localFiles[i].FileName;
-                        if (filename0.Substring(filename0.Length - 1, 1) != "/")
-                        {
-                            continue;
-                        }
-
-                        // see if the next file is in that directory
-                        string filename1 = _localFiles[i + 1].FileName;
-                        if (filename1.Length <= filename0.Length)
-                        {
-                            continue;
-                        }
-                        if (TrrntZipStringCompare(filename0, filename1.Substring(0, filename0.Length)) != 0)
-                        {
-                            continue;
-                        }
-
-                        // if we found a file in the directory then we do not need the directory entry
-                        trrntzip = false;
-                        break;
-                    }
-                }
-
-                if (trrntzip)
-                {
-                    ZipStatus |= ZipStatus.TrrntZip;
                 }
 
                 return ZipReturn.ZipGood;
@@ -715,68 +627,6 @@ namespace Compress.ZipFile
             }
         }
 
-        public ZipReturn ZipCreateFake()
-        {
-            if (ZipOpen != ZipOpenType.Closed)
-            {
-                return ZipReturn.ZipFileAlreadyOpen;
-            }
-
-            ZipOpen = ZipOpenType.OpenFakeWrite;
-            return ZipReturn.ZipGood;
-        }
-
-        public void ZipFileCloseFake(ulong fileOffset, out byte[] centeralDir)
-        {
-            centeralDir = null;
-            if (ZipOpen != ZipOpenType.OpenFakeWrite)
-            {
-                return;
-            }
-
-            _zip64 = false;
-            bool lTrrntzip = true;
-
-            _zipFs = new MemoryStream();
-
-            _centerDirStart = fileOffset;
-            if (_centerDirStart >= 0xffffffff)
-            {
-                _zip64 = true;
-            }
-
-            CrcCalculatorStream crcCs = new CrcCalculatorStream(_zipFs, true);
-
-            foreach (LocalFile t in _localFiles)
-            {
-                t.CenteralDirectoryWrite(crcCs);
-                _zip64 |= t.Zip64;
-                lTrrntzip &= t.TrrntZip;
-            }
-
-            crcCs.Flush();
-            crcCs.Close();
-
-            _centerDirSize = (ulong) _zipFs.Position;
-
-            _fileComment = lTrrntzip ? GetBytes("TORRENTZIPPED-" + crcCs.Crc.ToString("X8")) : new byte[0];
-            ZipStatus = lTrrntzip ? ZipStatus.TrrntZip : ZipStatus.None;
-
-            crcCs.Dispose();
-
-            if (_zip64)
-            {
-                _endOfCenterDir64 = fileOffset + (ulong) _zipFs.Position;
-                Zip64EndOfCentralDirWrite();
-                Zip64EndOfCentralDirectoryLocatorWrite();
-            }
-            EndOfCentralDirWrite();
-
-            centeralDir = ((MemoryStream) _zipFs).ToArray();
-            _zipFs.Close();
-            _zipFs.Dispose();
-            ZipOpen = ZipOpenType.Closed;
-        }
 
 
 
@@ -824,27 +674,6 @@ namespace Compress.ZipFile
             _readIndex = 0;
 
             return tmpFile.LocalFileOpenReadStream(raw, out stream, out streamSize, out compressionMethod);
-        }
-
-        public ZipReturn ZipFileAddFake(string filename, ulong fileOffset, ulong uncompressedSize, ulong compressedSize, byte[] crc32, out byte[] localHeader)
-        {
-            localHeader = null;
-
-            if (ZipOpen != ZipOpenType.OpenFakeWrite)
-            {
-                return ZipReturn.ZipWritingToInputFile;
-            }
-
-            LocalFile lf = new LocalFile(_zipFs, filename);
-            _localFiles.Add(lf);
-
-            MemoryStream ms = new MemoryStream();
-            lf.LocalFileHeaderFake(fileOffset, uncompressedSize, compressedSize, crc32, ms);
-
-            localHeader = ms.ToArray();
-            ms.Close();
-
-            return ZipReturn.ZipGood;
         }
 
         public static void CreateDirForFile(string sFilename)
@@ -1087,7 +916,6 @@ namespace Compress.ZipFile
             public ulong UncompressedSize { get; private set; }
 
             public bool Zip64 { get; private set; }
-            public bool TrrntZip { get; private set; }
 
             public byte[] sha1 { get; private set; }
             public byte[] md5 { get; private set; }
@@ -1309,8 +1137,6 @@ namespace Compress.ZipFile
             {
                 try
                 {
-                    TrrntZip = true;
-
                     BinaryReader br = new BinaryReader(_zipFs);
 
                     _zipFs.Position = (long) RelativeOffsetOfLocalHeader;
@@ -1322,10 +1148,6 @@ namespace Compress.ZipFile
 
                     br.ReadUInt16(); // version needed to extract
                     ushort generalPurposeBitFlagLocal = br.ReadUInt16();
-                    if (generalPurposeBitFlagLocal != _generalPurposeBitFlag)
-                    {
-                        TrrntZip = false;
-                    }
 
                     ushort tshort = br.ReadUInt16();
                     if (tshort != _compressionMethod)
@@ -1499,8 +1321,6 @@ namespace Compress.ZipFile
             {
                 try
                 {
-                    TrrntZip = true;
-
                     BinaryReader br = new BinaryReader(_zipFs);
 
                     _zipFs.Position = (long) RelativeOffsetOfLocalHeader;
@@ -1652,74 +1472,6 @@ namespace Compress.ZipFile
                 bw.Write(extraField.ToArray(), 0, extraFieldLength);
             }
 
-            public void LocalFileHeaderFake(ulong filePosition, ulong uncompressedSize, ulong compressedSize, byte[] crc32, MemoryStream ms)
-            {
-                RelativeOffsetOfLocalHeader = filePosition;
-                TrrntZip = true;
-                UncompressedSize = uncompressedSize;
-                _compressedSize = compressedSize;
-                CRC = crc32;
-
-                BinaryWriter bw = new BinaryWriter(ms);
-
-                Zip64 = UncompressedSize >= 0xffffffff;
-
-                byte[] bFileName;
-                if (IsUnicode(FileName))
-                {
-                    _generalPurposeBitFlag |= 1 << 11;
-                    bFileName = Encoding.UTF8.GetBytes(FileName);
-                }
-                else
-                {
-                    bFileName = GetBytes(FileName);
-                }
-
-                ushort versionNeededToExtract = (ushort) (Zip64 ? 45 : 20);
-
-                const uint header = 0x4034B50;
-                bw.Write(header);
-                bw.Write(versionNeededToExtract);
-                bw.Write(_generalPurposeBitFlag);
-                bw.Write(_compressionMethod);
-                bw.Write(_lastModFileTime);
-                bw.Write(_lastModFileDate);
-
-                uint tCompressedSize;
-                uint tUncompressedSize;
-                if (Zip64)
-                {
-                    tCompressedSize = 0xffffffff;
-                    tUncompressedSize = 0xffffffff;
-                }
-                else
-                {
-                    tCompressedSize = (uint) _compressedSize;
-                    tUncompressedSize = (uint) UncompressedSize;
-                }
-                bw.Write(CRC[3]);
-                bw.Write(CRC[2]);
-                bw.Write(CRC[1]);
-                bw.Write(CRC[0]);
-                bw.Write(tCompressedSize);
-                bw.Write(tUncompressedSize);
-
-                ushort fileNameLength = (ushort) bFileName.Length;
-                bw.Write(fileNameLength);
-
-                ushort extraFieldLength = (ushort) (Zip64 ? 20 : 0);
-                bw.Write(extraFieldLength);
-
-                bw.Write(bFileName, 0, fileNameLength);
-
-                if (Zip64)
-                {
-                    bw.Write((ushort) 0x0001); // id
-                    bw.Write((ushort) 16); // data length
-                    bw.Write(UncompressedSize);
-                    bw.Write(_compressedSize);
-                }
-            }
 
             public ZipReturn LocalFileOpenReadStream(bool raw, out Stream stream, out ulong streamSize, out ushort compressionMethod)
             {
@@ -1773,19 +1525,16 @@ namespace Compress.ZipFile
                 if (raw)
                 {
                     _writeStream = _zipFs;
-                    TrrntZip = trrntZip;
                 }
                 else
                 {
                     if (compressionMethod == 0)
                     {
                         _writeStream = _zipFs;
-                        TrrntZip = false;
                     }
                     else
                     {
                         _writeStream = new DeflateStream(_zipFs, CompressionMode.Compress, CompressionLevel.BestCompression, true);
-                        TrrntZip = true;
                     }
                 }
 

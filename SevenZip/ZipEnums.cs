@@ -1,11 +1,8 @@
-﻿using System;
-
-namespace Compress
+﻿namespace Compress
 {
     public enum ZipReturn
     {
         ZipGood,
-        ZipFileLocked,
         ZipFileCountError,
         ZipSignatureError,
         ZipExtraDataOnEndOfZip,
@@ -26,7 +23,6 @@ namespace Compress
         ZipErrorOpeningFile,
         ZipErrorFileNotFound,
         ZipErrorReadingFile,
-        ZipErrorTimeStamp,
         ZipErrorRollBackFile,
         ZipTryingToAccessADirectory,
         ZipUntested
@@ -37,16 +33,6 @@ namespace Compress
     {
         Closed,
         OpenRead,
-        OpenWrite,
-        OpenFakeWrite
-    }
-
-    [Flags]
-    public enum ZipStatus
-    {
-        None = 0x0,
-        TrrntZip = 0x1,
-        ExtraData = 0x2,
-        Trrnt7Zip = 0x4
+        OpenWrite
     }
 }

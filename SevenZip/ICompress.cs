@@ -27,9 +27,6 @@ namespace Compress
         ZipReturn ZipFileCloseReadStream();
         void DeepScan();
 
-
-        ZipStatus ZipStatus { get; }
-
         string ZipFilename { get; }
 
         void ZipFileAddDirectory();
