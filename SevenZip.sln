@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.26730.16
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SevenZipTest", "SevenZipTest\SevenZipTest.csproj", "{0F82C333-B56E-4943-A48D-795A97DFF8B9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Compress", "..\SevenZip\Compress.csproj", "{C30EE098-15D3-40D8-90F6-465D924D9987}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Compress", "SevenZip\Compress.csproj", "{C30EE098-15D3-40D8-90F6-465D924D9987}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -49,7 +49,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\SevenZip\Compress.csproj">
+    <ProjectReference Include="..\SevenZip\Compress.csproj">
       <Project>{c30ee098-15d3-40d8-90f6-465d924d9987}</Project>
       <Name>Compress</Name>
     </ProjectReference>
