@@ -10,6 +10,9 @@ namespace SevenZipTest
     {
         static void Main(string[] args)
         {
+            /*
+             * nothing here just yet but will soon add a set of usage examples
+             */
         }
     }
 }
